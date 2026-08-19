@@ -33,11 +33,11 @@ the next evidence-backed strategy families and records their data requirements.
 
 ```powershell
 uv sync --locked
-Copy-Item .env.example .env
-Copy-Item config/settings.example.toml config/settings.toml
-Copy-Item config/strategies.example.json config/strategies.json
-Copy-Item config/sec-rules.example.json config/sec-rules.json
-Copy-Item config/subscribers.example.json config/subscribers.json
+cp .env.example .env
+cp config/settings.example.toml config/settings.toml
+cp config/strategies.example.json config/strategies.json
+cp config/sec-rules.example.json config/sec-rules.json
+cp config/subscribers.example.json config/subscribers.json
 ```
 
 Secrets belong only in `.env` or the process environment. Do not put them in
