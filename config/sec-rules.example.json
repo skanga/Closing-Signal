@@ -1,0 +1,59 @@
+{
+  "registered_direct": [
+    "registered direct offering",
+    "securities purchase agreement",
+    "direct offering"
+  ],
+  "shelf": [
+    "shelf registration statement",
+    "may offer and sell from time to time",
+    "universal shelf"
+  ],
+  "shelf_takedown": [
+    "prospectus supplement",
+    "underwritten offering",
+    "public offering price"
+  ],
+  "at_the_market": [
+    "at-the-market offering",
+    "at the market offering",
+    "sales agreement"
+  ],
+  "private_placement": [
+    "private placement",
+    "exempt offering of securities",
+    "regulation d"
+  ],
+  "convertible_or_warrant": [
+    "convertible note",
+    "convertible preferred",
+    "warrant to purchase"
+  ],
+  "employee_issuance": [
+    "equity incentive plan",
+    "employee stock purchase plan",
+    "compensatory benefit plan"
+  ],
+  "merger_or_exchange": [
+    "business combination",
+    "merger consideration",
+    "exchange offer"
+  ],
+  "regulation_a": [
+    "regulation a offering",
+    "offering circular",
+    "qualified offering statement"
+  ],
+  "amendment": [
+    "amendment no.",
+    "post-effective amendment"
+  ],
+  "effectiveness": [
+    "notice of effectiveness",
+    "effective date"
+  ],
+  "withdrawal": [
+    "request for withdrawal",
+    "withdraw the registration statement"
+  ]
+}

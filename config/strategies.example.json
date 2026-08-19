@@ -1,0 +1,67 @@
+{
+  "version": "us-research-v1",
+  "strategies": {
+    "gap_up_shakeout": {
+      "enabled": true,
+      "parameters": {
+        "minimum_gap": "0.04",
+        "maximum_gap": "0.20",
+        "volume_multiple": "0.75",
+        "support_tolerance": "0.05",
+        "require_bearish_shakeout": true
+      }
+    },
+    "high_tight_flag": {
+      "enabled": true,
+      "parameters": {
+        "momentum_window": 40,
+        "momentum_ratio": "2.0",
+        "consolidation_window": 10,
+        "consolidation_ratio": "1.25",
+        "minimum_high_retention": "0.75",
+        "volume_window": 20,
+        "maximum_volume_ratio": "0.80"
+      }
+    },
+    "moving_average_volume": {
+      "enabled": true,
+      "parameters": {
+        "fast_window": 20,
+        "slow_window": 50,
+        "volume_window": 20,
+        "volume_multiple": "1.5"
+      }
+    },
+    "relative_strength_breakout": {
+      "enabled": true,
+      "parameters": {
+        "return_window": 252,
+        "minimum_percentile": "90",
+        "breakout_window": 63,
+        "minimum_high_proximity": "0.98"
+      }
+    },
+    "turtle_breakout": {
+      "enabled": true,
+      "parameters": {
+        "breakout_window": 55,
+        "minimum_dollar_volume": "0",
+        "ranking_basis": "breakout_strength",
+        "require_bullish_body": true
+      }
+    },
+    "uptrend_shock_reversal": {
+      "enabled": true,
+      "parameters": {
+        "fast_trend_window": 50,
+        "slow_trend_window": 200,
+        "atr_window": 14,
+        "minimum_down_return": "0.08",
+        "minimum_atr_multiple": "2.0",
+        "volume_window": 20,
+        "volume_multiple": "1.5",
+        "minimum_close_location": "0.75"
+      }
+    }
+  }
+}

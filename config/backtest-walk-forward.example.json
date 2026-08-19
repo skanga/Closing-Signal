@@ -1,0 +1,46 @@
+{
+  "version": "us-backtest-v1",
+  "mode": "walk_forward",
+  "strategy_id": "moving_average_volume",
+  "output_directory": "reports/ma-volume-walk-forward",
+  "configuration": {
+    "start": "2016-01-01",
+    "end": "2025-12-31",
+    "benchmark_symbol": "SPY",
+    "execution": "next_session_open",
+    "initial_capital": "100000",
+    "position_size_fraction": "0.10",
+    "holding_sessions": 20,
+    "fixed_fee": "0",
+    "per_share_fee": "0.005",
+    "percentage_fee": "0",
+    "minimum_fee": "1",
+    "slippage_bps": "10",
+    "annual_risk_free_rate": "0.03",
+    "random_seed": 20260818,
+    "evaluation_segment": "in_sample",
+    "rebalance_rule": "daily",
+    "holding_rule": "fixed_sessions",
+    "position_sizing": "fraction_of_initial_capital",
+    "missing_exit_policy": "fail",
+    "strategy_config_version": "us-research-v1",
+    "universe_version": "openfigi-nasdaq-sec-snapshot",
+    "data_version": "alpaca-iex-development-snapshot",
+    "code_version": "git-commit-sha"
+  },
+  "candidate_parameters": [
+    {"fast_window": 20, "slow_window": 50, "volume_window": 20, "volume_multiple": "1.5"},
+    {"fast_window": 20, "slow_window": 100, "volume_window": 20, "volume_multiple": "1.5"}
+  ],
+  "walk_forward": {
+    "train_sessions": 756,
+    "validation_sessions": 252,
+    "test_sessions": 252,
+    "step_sessions": 252,
+    "mode": "rolling"
+  },
+  "selection": {
+    "metric": "calmar_ratio",
+    "direction": "maximize"
+  }
+}

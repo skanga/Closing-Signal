@@ -1,0 +1,21 @@
+[
+  {
+    "email": "reader@example.com",
+    "active": true,
+    "categories": [
+      "strategy:moving_average_volume",
+      "strategy:high_tight_flag",
+      "strategy:turtle_breakout",
+      "strategy:relative_strength_breakout",
+      "strategy:gap_up_shakeout",
+      "strategy:uptrend_shock_reversal",
+      "sec"
+    ],
+    "consent_source": "double_opt_in_email",
+    "policy_version": "privacy-v1",
+    "consented_at": "2026-08-18T17:00:00+00:00",
+    "confirmed_at": "2026-08-18T17:05:00+00:00",
+    "deactivated_at": null,
+    "deactivation_reason": null
+  }
+]

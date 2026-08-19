@@ -1,0 +1,81 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Synchronize locked dependencies
+        run: uv sync --locked
+
+      - name: Check lockfile
+        run: uv lock --check
+
+      - name: Check formatting
+        run: uv run black --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type-check
+        run: uv run mypy
+
+      - name: Test
+        run: >-
+          uv run pytest --cov=closing_signal --cov-branch
+          --cov-report=term-missing --cov-fail-under=80
+
+      - name: Audit dependencies
+        if: matrix.python-version == '3.13'
+        run: uv run pip-audit
+
+      - name: Build package
+        if: matrix.python-version == '3.13'
+        run: uv build
+
+      - name: Smoke-test isolated wheel
+        if: matrix.python-version == '3.13'
+        shell: bash
+        run: |
+          mkdir package-smoke
+          cd package-smoke
+          uv run --isolated --no-project \
+            --with ../dist/closing_signal-3.0.0-py3-none-any.whl \
+            python -c "import closing_signal; assert closing_signal.__version__ == '3.0.0'"
+          uv run --isolated --no-project \
+            --with ../dist/closing_signal-3.0.0-py3-none-any.whl \
+            closing-signal --help
+
+      - name: Reject sensitive build inputs
+        if: matrix.python-version == '3.13'
+        shell: bash
+        run: |
+          if tar -tzf dist/closing_signal-3.0.0.tar.gz | grep -E '(\.env$|\.db$|subscribers\.json$|\.test-tmp|\.tmp/)'; then
+            echo "Source distribution contains a forbidden sensitive or temporary path"
+            exit 1
+          fi

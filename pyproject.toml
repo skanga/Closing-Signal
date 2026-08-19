@@ -1,0 +1,112 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "closing-signal"
+version = "3.0.0"
+description = "U.S. end-of-day equity screening, SEC alerts, and reproducible backtesting"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "idna>=3.15",
+    "pydantic-settings>=2.14.2",
+    "requests>=2.32",
+    "tzdata>=2025.3",
+    "urllib3>=2.7.0",
+]
+
+[project.scripts]
+closing-signal = "closing_signal.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["closing_signal"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/closing_signal",
+    "/tests",
+    "/config",
+    "/docs",
+    "/.github",
+    "/.env.example",
+    "/.gitignore",
+    "/.python-version",
+    "/main.py",
+    "/pyproject.toml",
+    "/README.md",
+    "/uv.lock",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1",
+    "hypothesis>=6.125",
+    "mypy>=1.15",
+    "pip-audit>=2.9",
+    "pytest>=9.0.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.11",
+    "types-requests>=2.32",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+include = "\\.pyi?$"
+extend-exclude = """
+/(
+  \\.git
+  | \\.mypy_cache
+  | \\.pytest_cache
+  | \\.ruff_cache
+  | \\.venv
+  | build
+  | dist
+)/
+"""
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".hypothesis"]
+
+[tool.ruff.lint]
+select = ["B", "C4", "E", "F", "I", "PIE", "RUF", "SIM", "UP", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["closing_signal"]
+
+[tool.ruff.format]
+docstring-code-format = true
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["main.py", "closing_signal"]
+strict = true
+pretty = true
+show_error_codes = true
+show_error_context = true
+warn_unreachable = true
+exclude = ["^build/", "^dist/"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
+
+[tool.coverage.run]
+branch = true
+source = ["closing_signal"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "@abstractmethod",
+]

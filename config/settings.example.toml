@@ -1,0 +1,55 @@
+# Development/private-beta profile. Copy to settings.toml, replace the two
+# your-domain.example values, and supply secrets only through CLOSING_SIGNAL_* env vars.
+storage_backend = "sqlite"
+database_path = "data/us-equities.db"
+asset_classification_source = "openfigi"
+reference_reconciliation_sources = ["nasdaq", "sec"]
+ingestion_chunk_size = 100
+
+# IEX is approved only for development and automated contract tests. A
+# commercial production deployment must replace this with licensed SIP access.
+alpaca_feed = "iex"
+alpaca_asset_base_url = "https://paper-api.alpaca.markets"
+finalization_delay_minutes = 150
+historical_refetch_sessions = 5
+corporate_action_refetch_sessions = 63
+
+http_max_attempts = 4
+http_base_delay_seconds = 1.0
+http_max_delay_seconds = 30.0
+http_jitter_seconds = 0.5
+
+strategy_config_version = "us-research-v1"
+strategy_parameters_file = "config/strategies.json"
+backtest_config_version = "us-backtest-v1"
+
+sec_candidate_forms = [
+  "S-1", "S-1/A", "S-3", "S-3/A", "S-3ASR", "F-1", "F-1/A",
+  "F-3", "F-3/A", "F-3ASR", "424B1", "424B2", "424B3", "424B4",
+  "424B5", "424B7", "424B8", "FWP", "POS AM", "POSASR", "EFFECT", "RW",
+  "D", "D/A", "1-A", "1-A/A", "1-K", "1-SA", "253G1", "253G2",
+  "253G3", "253G4", "S-8", "S-8 POS", "S-4", "S-4/A", "F-4", "F-4/A",
+  "8-K", "8-K/A", "6-K", "6-K/A", "10-Q", "10-Q/A", "10-K", "10-K/A",
+  "PRE 14A", "DEF 14A"
+]
+sec_history_start = 2016-01-01
+sec_classification_rules_file = "config/sec-rules.json"
+
+# Brevo Free beta profile: 300 provider attempts per UTC day. Retries are four
+# total attempts with 1m, 5m, and 30m delays.
+email_transport = "smtp"
+email_template_version = "email-v1"
+email_max_attempts = 4
+email_backoff_seconds = [60, 300, 1800]
+email_daily_send_limit = 300
+security_link_template = "https://your-domain.example/securities/{symbol}"
+smtp_host = "smtp-relay.brevo.com"
+smtp_port = 587
+smtp_from_address = "alerts@alerts.your-domain.example"
+smtp_security = "starttls"
+subscriber_file = "config/subscribers.json"
+
+health_market_max_age_sessions = 1
+health_required_operations = ["sync-daily", "screen", "sec-sync"]
+health_operation_max_age_hours = 26
+health_min_free_disk_bytes = 10737418240
