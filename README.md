@@ -6,9 +6,7 @@ for market data, official SEC EDGAR sources for offering alerts, SMTP email for
 delivery, and a point-in-time backtest engine that reuses the production strategy
 interface.
 
-The subscriber-facing end-of-day digest is branded **The Closing Signal**.
-
-The U.S. product replaces the former China A-share runtime completely. It does
+The subscriber-facing end-of-day digest is branded **The Closing Signal**. It does
 not place orders or redistribute raw market data.
 
 The approved product contract and external commercial-launch gates are in the
