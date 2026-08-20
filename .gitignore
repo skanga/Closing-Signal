@@ -15,6 +15,7 @@ ENV/
 .idea/
 .vscode/
 .kiro
+.worktrees/
 
 # Database files
 data/*.db
