@@ -125,12 +125,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         _write_failure(message)
         return 5
     failure: Exception | None = None
-    result: dict[str, object] | None = None
+    captured_result: dict[str, object] | None = None
     status = 4
     try:
         repository.start_operation_run(owner, args.command)
         try:
-            status, result = _capture_result(
+            status, captured_result = _capture_result(
                 lambda: handler(args, settings, repository, progress)
             )
         except Exception as exc:
@@ -149,14 +149,15 @@ def run(argv: Sequence[str] | None = None) -> int:
         )
     except Exception as exc:
         failure = exc
-    repository.release_operation_lock(lock_name, owner)
+    finally:
+        repository.release_operation_lock(lock_name, owner)
     if failure is not None:
         message = f"{args.command} failed: {type(failure).__name__}"
         _write_failure(message)
         return 4
-    if result is None:  # pragma: no cover - guarded by the captured-result contract.
+    if captured_result is None:  # pragma: no cover - guarded by the captured-result contract.
         raise RuntimeError("command completed without a result")
-    _write_result(result)
+    _write_result(captured_result)
     return status
 
 

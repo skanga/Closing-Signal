@@ -151,6 +151,26 @@ def test_operation_record_failure_releases_global_lock(tmp_path, monkeypatch) ->
     assert second_status == 0
 
 
+def test_keyboard_interrupt_releases_global_lock(tmp_path, monkeypatch, capsys) -> None:
+    database = tmp_path / "market.db"
+    monkeypatch.setattr(cli, "load_settings", lambda path: SimpleNamespace(database_path=database))
+
+    def interrupt(args, settings, repository, progress) -> int:
+        del args, settings, repository, progress
+        raise KeyboardInterrupt
+
+    monkeypatch.setitem(cli._OPERATION_HANDLERS, "sync-universe", interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        run(["--config", "settings.json", "sync-universe"])
+    captured = capsys.readouterr()
+
+    repository = SQLiteRepository(database)
+    assert repository.acquire_operation_lock("mutating-operation", "next-owner") is True
+    repository.release_operation_lock("mutating-operation", "next-owner")
+    assert captured.out == ""
+
+
 def test_run_writes_progress_to_stderr_and_result_to_stdout(tmp_path, monkeypatch, capsys) -> None:
     database = tmp_path / "market.db"
     monkeypatch.setattr(cli, "load_settings", lambda path: SimpleNamespace(database_path=database))
