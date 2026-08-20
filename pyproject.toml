@@ -41,7 +41,7 @@ include = [
 
 [dependency-groups]
 dev = [
-    "black>=25.1",
+    "black==25.1.0",
     "hypothesis>=6.125",
     "mypy>=1.15",
     "pip-audit>=2.9",

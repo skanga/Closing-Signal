@@ -239,7 +239,8 @@ class SQLiteRepository:
         }
         if "adjustment" in columns:
             return
-        connection.executescript("""
+        connection.executescript(
+            """
             ALTER TABLE daily_bars RENAME TO daily_bars_pre_v3;
             CREATE TABLE daily_bars (
                 instrument_id TEXT NOT NULL,
@@ -264,7 +265,8 @@ class SQLiteRepository:
                    open, high, low, close, volume, dollar_volume, 'raw'
             FROM daily_bars_pre_v3;
             DROP TABLE daily_bars_pre_v3;
-            """)
+            """
+        )
 
     @staticmethod
     def _migrate_strategy_run_diagnostics(connection: sqlite3.Connection) -> None:
@@ -949,11 +951,13 @@ class SQLiteRepository:
     def list_instruments(self) -> list[Instrument]:
         """Return the current canonical catalog in deterministic symbol order."""
         with closing(self._connect()) as connection:
-            rows = connection.execute("""
+            rows = connection.execute(
+                """
                 SELECT instrument_id, canonical_symbol, provider_symbol, name, exchange,
                        instrument_type, status, tradable, first_observed, last_observed
                 FROM instruments ORDER BY canonical_symbol
-                """).fetchall()
+                """
+            ).fetchall()
         return [
             Instrument(
                 instrument_id=row[0],
@@ -1043,15 +1047,18 @@ class SQLiteRepository:
         findings = 0
         with closing(self._connect()) as connection:
             progress(ProgressEvent("Scanning for incomplete adjustment series"))
-            incomplete = connection.execute("""
+            incomplete = connection.execute(
+                """
                 SELECT instrument_id, session_date, provider, feed, frequency,
                        GROUP_CONCAT(DISTINCT adjustment)
                 FROM daily_bars
                 GROUP BY instrument_id, session_date, provider, feed, frequency
                 HAVING COUNT(DISTINCT adjustment) < 3
-                """).fetchall()
+                """
+            ).fetchall()
             progress(ProgressEvent("Checking split-factor consistency"))
-            comparisons = connection.execute("""
+            comparisons = connection.execute(
+                """
                 SELECT raw.instrument_id, raw.session_date,
                        raw.open, raw.high, raw.low, raw.close,
                        adjusted.open, adjusted.high, adjusted.low, adjusted.close
@@ -1064,7 +1071,8 @@ class SQLiteRepository:
                  AND adjusted.frequency = raw.frequency
                  AND adjusted.adjustment = 'split'
                 WHERE raw.adjustment = 'raw'
-                """).fetchall()
+                """
+            ).fetchall()
         progress(ProgressEvent("Persisting data-quality findings"))
         for instrument_id, session, provider, feed, frequency, adjustments in incomplete:
             findings += 1

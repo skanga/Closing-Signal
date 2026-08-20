@@ -124,14 +124,16 @@ def test_symbol_change_preserves_historical_alias(tmp_path) -> None:
 def test_pre_adjustment_schema_migrates_existing_rows_as_raw(tmp_path) -> None:
     path = tmp_path / "market.db"
     with closing(sqlite3.connect(path)) as connection, connection:
-        connection.execute("""
+        connection.execute(
+            """
             CREATE TABLE daily_bars (
                 instrument_id TEXT, session_date TEXT, source_timestamp TEXT,
                 provider TEXT, feed TEXT, frequency TEXT, open TEXT, high TEXT,
                 low TEXT, close TEXT, volume INTEGER, dollar_volume TEXT,
                 PRIMARY KEY (instrument_id, session_date, provider, feed, frequency)
             )
-            """)
+            """
+        )
         connection.execute(
             "INSERT INTO daily_bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
