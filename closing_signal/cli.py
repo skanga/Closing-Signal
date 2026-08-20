@@ -10,6 +10,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from closing_signal.core.progress import ProgressEvent, ProgressReporter, StderrProgressReporter
 from closing_signal.core.us_config import AppSettings, ConfigurationFileError, load_settings
 from closing_signal.data.repository import SQLiteRepository
 from closing_signal.operations import (
@@ -86,6 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
 def run(argv: Sequence[str] | None = None) -> int:
     """Execute one command and return zero only for its defined success state."""
     args = build_parser().parse_args(argv)
+    progress = StderrProgressReporter(args.command)
+    progress(ProgressEvent("Starting"))
     try:
         settings = load_settings(args.config)
     except (ConfigurationFileError, ValidationError) as exc:
@@ -115,7 +118,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     try:
         repository.start_operation_run(owner, args.command)
         try:
-            status = handler(args, settings, repository)
+            status = handler(args, settings, repository, progress)
         except Exception as exc:
             repository.finish_operation_run(
                 owner,
@@ -140,7 +143,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
 
 _OPERATION_HANDLERS: dict[
-    str, Callable[[argparse.Namespace, AppSettings, SQLiteRepository], int]
+    str, Callable[[argparse.Namespace, AppSettings, SQLiteRepository, ProgressReporter], int]
 ] = {
     "sync-universe": sync_universe,
     "sync-daily": sync_daily,

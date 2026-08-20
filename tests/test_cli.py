@@ -1,9 +1,12 @@
 """Operator command surface and exit-status contracts."""
 
+import json
+
 from types import SimpleNamespace
 
 from closing_signal import cli
 from closing_signal.cli import COMMANDS, build_parser, run
+from closing_signal.core.progress import ProgressEvent
 from closing_signal.data.repository import SQLiteRepository
 
 
@@ -61,7 +64,7 @@ def test_dispatched_command_persists_completed_operation_state(tmp_path, monkeyp
     monkeypatch.setitem(
         cli._OPERATION_HANDLERS,
         "sync-universe",
-        lambda args, settings, repository: 0,
+        lambda args, settings, repository, progress: 0,
     )
 
     status = run(["--config", "settings.json", "sync-universe"])
@@ -91,7 +94,7 @@ def test_operation_record_failure_releases_global_lock(tmp_path, monkeypatch) ->
     monkeypatch.setitem(
         cli._OPERATION_HANDLERS,
         "sync-universe",
-        lambda args, settings, selected_repository: 0,
+        lambda args, settings, selected_repository, progress: 0,
     )
 
     first_status = run(["--config", "settings.json", "sync-universe"])
@@ -99,3 +102,27 @@ def test_operation_record_failure_releases_global_lock(tmp_path, monkeypatch) ->
 
     assert first_status == 4
     assert second_status == 0
+
+
+def test_run_writes_progress_to_stderr_and_result_to_stdout(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    database = tmp_path / "market.db"
+    monkeypatch.setattr(cli, "load_settings", lambda path: SimpleNamespace(database_path=database))
+
+    def handler(args, settings, repository, progress) -> int:
+        del args, settings, repository
+        progress(ProgressEvent("Working", completed=1, total=2, unit="steps"))
+        print(json.dumps({"status": "complete"}))
+        return 0
+
+    monkeypatch.setitem(cli._OPERATION_HANDLERS, "sync-universe", handler)
+
+    assert run(["--config", "settings.json", "sync-universe"]) == 0
+    captured = capsys.readouterr()
+
+    assert captured.out == '{"status": "complete"}\n'
+    assert captured.err.splitlines() == [
+        "[sync-universe] Starting",
+        "[sync-universe] Working: 1/2 steps",
+    ]

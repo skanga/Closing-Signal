@@ -22,6 +22,7 @@ from closing_signal.backtest.request import (
     parse_backtest_request,
 )
 from closing_signal.core.http import RetryPolicy
+from closing_signal.core.progress import ProgressReporter, no_progress
 from closing_signal.core.us_config import AppSettings
 from closing_signal.data.ingestion import MarketDataIngestionService
 from closing_signal.data.repository import SQLiteRepository
@@ -93,7 +94,10 @@ def _asset_classifier(settings: AppSettings) -> AssetClassifier:
 
 
 def sync_universe(
-    args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
 ) -> int:
     """Synchronize mapped NYSE/Nasdaq securities and snapshot membership."""
     client = build_alpaca(settings)
@@ -130,7 +134,10 @@ def sync_universe(
 
 
 def sync_daily(
-    args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
 ) -> int:
     """Synchronize raw, split-adjusted, and all-adjusted completed daily bars."""
     client = build_alpaca(settings)
@@ -150,7 +157,12 @@ def sync_daily(
     return _sync_range(client, settings, repository, start, session_date, action_start=action_start)
 
 
-def backfill(args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository) -> int:
+def backfill(
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
+) -> int:
     """Backfill the confirmed 2016-forward history through the latest completion."""
     client = build_alpaca(settings)
     start = args.start or date(2016, 1, 1)
@@ -161,7 +173,12 @@ def backfill(args: argparse.Namespace, settings: AppSettings, repository: SQLite
     return _sync_range(client, settings, repository, start, end, action_start=start)
 
 
-def screen(args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository) -> int:
+def screen(
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
+) -> int:
     """Run configured strategies and optionally deliver idempotent result email."""
     client = build_alpaca(settings)
     latest = _latest_completed_session(client, settings).session_date
@@ -281,7 +298,10 @@ def screen(args: argparse.Namespace, settings: AppSettings, repository: SQLiteRe
 
 
 def retry_notifications(
-    args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
 ) -> int:
     """Re-evaluate a session and retry only recipients lacking successful keys."""
     retry_args = argparse.Namespace(
@@ -290,7 +310,7 @@ def retry_notifications(
         reprocess=True,
         allow_retry=True,
     )
-    return screen(retry_args, settings, repository)
+    return screen(retry_args, settings, repository, progress)
 
 
 def health_check(
@@ -393,7 +413,10 @@ def health_check(
 
 
 def data_audit(
-    args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
 ) -> int:
     """Persist and summarize canonical data-quality findings under the global lock."""
     del args, settings
@@ -412,7 +435,10 @@ def data_audit(
 
 
 def run_backtest(
-    args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
 ) -> int:
     """Execute a validated single-segment or walk-forward historical evaluation."""
     request = parse_backtest_request(json.loads(args.request.read_text(encoding="utf-8")))
@@ -543,7 +569,12 @@ def _backtest_progress(event: BacktestProgress) -> None:
     )
 
 
-def sec_sync(args: argparse.Namespace, settings: AppSettings, repository: SQLiteRepository) -> int:
+def sec_sync(
+    args: argparse.Namespace,
+    settings: AppSettings,
+    repository: SQLiteRepository,
+    progress: ProgressReporter = no_progress,
+) -> int:
     """Discover, classify, and deliver every configured candidate SEC filing."""
     rules = _load_string_lists(settings.sec_classification_rules_file)
     client = EdgarClient(
