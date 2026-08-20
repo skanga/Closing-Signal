@@ -13,6 +13,7 @@ from closing_signal.market.calendar import MarketSession
 from closing_signal.notify.delivery import DeliveryResult
 from closing_signal.operations import (
     health_check,
+    retry_notifications,
     run_backtest,
     screen,
     sec_sync,
@@ -249,10 +250,12 @@ def test_screen_persists_structured_result_and_routes_email(tmp_path, monkeypatc
         security_link_template="https://example.test/{symbol}",
     )
 
+    screen_events = []
     status = screen(
         argparse.Namespace(session=date(2026, 1, 3), dry_run=False, reprocess=False),
         settings,
         repository,
+        screen_events.append,
     )
 
     assert status == 0
@@ -260,6 +263,12 @@ def test_screen_persists_structured_result_and_routes_email(tmp_path, monkeypatc
     assert repository.count("strategy_selections") == 1
     assert repository.count("subscription_events") == 1
     assert delivery.messages == 1
+    assert "Preparing point-in-time screening data" in {
+        event.message for event in screen_events
+    }
+    assert any(
+        event.message.startswith("Evaluating strategy ") for event in screen_events
+    )
 
 
 def test_sec_sync_delivers_candidate_and_persists_accession(tmp_path, monkeypatch) -> None:
@@ -323,7 +332,8 @@ def test_sec_sync_delivers_candidate_and_persists_accession(tmp_path, monkeypatc
         http_jitter_seconds=0,
     )
 
-    status = sec_sync(argparse.Namespace(dry_run=False), settings, repository)
+    sec_events = []
+    status = sec_sync(argparse.Namespace(dry_run=False), settings, repository, sec_events.append)
     second_status = sec_sync(argparse.Namespace(dry_run=False), settings, repository)
 
     assert status == 0
@@ -331,6 +341,31 @@ def test_sec_sync_delivers_candidate_and_persists_accession(tmp_path, monkeypatc
     assert repository.count("sec_filings") == 1
     assert delivery.messages == 1
     assert FakeEdgar.boundaries == [date(2016, 1, 1), date(2026, 1, 3)]
+    assert "Loading SEC issuer references" in {event.message for event in sec_events}
+    assert any(event.message == "Checking eligible SEC issuers" for event in sec_events)
+
+
+def test_retry_notifications_forwards_progress(monkeypatch) -> None:
+    selected: dict[str, object] = {}
+
+    def fake_screen(args, settings, repository, progress) -> int:
+        del args, settings, repository
+        selected["progress"] = progress
+        return 0
+
+    monkeypatch.setattr("closing_signal.operations.screen", fake_screen)
+    def reporter(event) -> None:
+        del event
+
+    status = retry_notifications(
+        argparse.Namespace(session=date(2026, 1, 3), dry_run=True),
+        SimpleNamespace(),
+        object(),
+        reporter,
+    )
+
+    assert status == 0
+    assert selected["progress"] is reporter
 
 
 def test_backtest_operation_writes_report_bundle(tmp_path, monkeypatch) -> None:
@@ -395,10 +430,19 @@ def test_backtest_operation_writes_report_bundle(tmp_path, monkeypatch) -> None:
         strategy_config_version="v1",
     )
 
-    status = run_backtest(argparse.Namespace(request=request), settings, repository)
+    backtest_events = []
+    status = run_backtest(
+        argparse.Namespace(request=request), settings, repository, backtest_events.append
+    )
 
     assert status == 0
     assert (output / "manifest.json").exists()
+    assert "Loading the backtest request and stored inputs" in {
+        event.message for event in backtest_events
+    }
+    assert any(
+        event.message == "Evaluating backtest sessions" for event in backtest_events
+    )
 
 
 def test_backtest_operation_runs_walk_forward_and_writes_isolated_folds(

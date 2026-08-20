@@ -23,7 +23,7 @@ from closing_signal.backtest.request import (
     parse_backtest_request,
 )
 from closing_signal.core.http import RetryPolicy
-from closing_signal.core.progress import ProgressEvent, ProgressReporter, no_progress
+from closing_signal.core.progress import ProgressEvent, ProgressReporter, no_progress, should_report
 from closing_signal.core.us_config import AppSettings
 from closing_signal.data.ingestion import MarketDataIngestionService
 from closing_signal.data.repository import SQLiteRepository
@@ -234,6 +234,7 @@ def screen(
     if not snapshot_ids:
         print('{"status":"failed","reason":"universe snapshot is missing"}')
         return 4
+    progress(ProgressEvent("Preparing point-in-time screening data"))
     instruments = {item.instrument_id: item for item in repository.list_instruments()}
     bars_by_symbol: dict[str, tuple[SignalBar, ...]] = {}
     for instrument_id in snapshot_ids:
@@ -273,7 +274,15 @@ def screen(
     runner = StrategyRunner()
     summaries: list[dict[str, object]] = []
     failures = 0
-    for strategy in strategies:
+    for strategy_number, strategy in enumerate(strategies, start=1):
+        progress(
+            ProgressEvent(
+                f"Evaluating strategy {strategy.strategy_id}",
+                completed=strategy_number,
+                total=len(strategies),
+                unit="strategies",
+            )
+        )
         run_key = _strategy_run_key(strategy.strategy_id, strategy.version, settings, session_date)
         if repository.strategy_run_exists(run_key) and not args.reprocess:
             summaries.append({"strategy": strategy.strategy_id, "status": "skipped_existing"})
@@ -465,7 +474,7 @@ def data_audit(
 ) -> int:
     """Persist and summarize canonical data-quality findings under the global lock."""
     del args, settings
-    new_findings = repository.run_data_audit()
+    new_findings = repository.run_data_audit(progress)
     findings = repository.count("quarantined_records")
     print(
         json.dumps(
@@ -486,6 +495,7 @@ def run_backtest(
     progress: ProgressReporter = no_progress,
 ) -> int:
     """Execute a validated single-segment or walk-forward historical evaluation."""
+    progress(ProgressEvent("Loading the backtest request and stored inputs"))
     request = parse_backtest_request(json.loads(args.request.read_text(encoding="utf-8")))
     if request.version != settings.backtest_config_version:
         raise ValueError("backtest request version does not match runtime configuration")
@@ -508,7 +518,7 @@ def run_backtest(
             snapshots,
             request.configuration,
             cash_dividends=dividends,
-            progress=_backtest_progress,
+            progress=_backtest_progress(progress),
         )
         paths = write_backtest_artifacts(result, request.output_directory)
         summary: dict[str, object] = {
@@ -528,7 +538,7 @@ def run_backtest(
         experiment = WalkForwardExperiment(
             engine=BacktestEngine(),
             selector=request.selection,
-            progress=_backtest_progress,
+            progress=_backtest_progress(progress),
         ).run(
             candidates=candidates,
             sessions=sorted(
@@ -596,22 +606,21 @@ def _backtest_inputs(repository: SQLiteRepository, config: BacktestConfig) -> tu
     )
 
 
-def _backtest_progress(event: BacktestProgress) -> None:
-    """Emit bounded JSON progress without adding nondeterminism to artifacts."""
-    if event.completed_sessions % 25 and event.completed_sessions != event.total_sessions:
-        return
-    print(
-        json.dumps(
-            {
-                "status": "progress",
-                "segment": event.evaluation_segment,
-                "session": event.session_date.isoformat(),
-                "completed_sessions": event.completed_sessions,
-                "total_sessions": event.total_sessions,
-            },
-            sort_keys=True,
+def _backtest_progress(reporter: ProgressReporter):
+    """Adapt engine session completions to bounded operation progress milestones."""
+    def report(event: BacktestProgress) -> None:
+        if event.completed_sessions % 25 and event.completed_sessions != event.total_sessions:
+            return
+        reporter(
+            ProgressEvent(
+                "Evaluating backtest sessions",
+                completed=event.completed_sessions,
+                total=event.total_sessions,
+                unit="sessions",
+            )
         )
-    )
+
+    return report
 
 
 def sec_sync(
@@ -629,6 +638,7 @@ def sec_sync(
         retry_policy=_retry_policy(settings),
     )
     classifier = FilingClassifier(rules=rules)
+    progress(ProgressEvent("Loading SEC issuer references"))
     issuer_mapping = client.fetch_company_tickers()
     registry = SubscriberRegistry.load(settings.subscriber_file)
     repository.sync_subscribers(registry.subscribers)
@@ -636,9 +646,23 @@ def sec_sync(
     delivery = _delivery_service(settings, repository)
     eligible_types = {"common_stock", "adr"}
     discovered = delivered = skipped = failures = 0
-    for instrument in repository.list_instruments():
-        if instrument.instrument_type.value not in eligible_types:
-            continue
+    eligible = tuple(
+        instrument
+        for instrument in repository.list_instruments()
+        if instrument.instrument_type.value in eligible_types
+    )
+    if not eligible:
+        progress(ProgressEvent("No eligible SEC issuers found"))
+    for issuer_number, instrument in enumerate(eligible, start=1):
+        if should_report(issuer_number, total=len(eligible), every=100):
+            progress(
+                ProgressEvent(
+                    "Checking eligible SEC issuers",
+                    completed=issuer_number,
+                    total=len(eligible),
+                    unit="issuers",
+                )
+            )
         cik = issuer_mapping.get(instrument.provider_symbol)
         if cik is None:
             continue

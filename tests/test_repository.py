@@ -168,10 +168,16 @@ def test_data_audit_quarantines_missing_series_and_inconsistent_factors(tmp_path
     )
     repository.upsert_daily_bars([raw, split])
 
-    findings = repository.run_data_audit()
+    audit_events = []
+    findings = repository.run_data_audit(audit_events.append)
 
     assert findings == 2
     assert repository.count("quarantined_records") == 2
+    assert [event.message for event in audit_events] == [
+        "Scanning for incomplete adjustment series",
+        "Checking split-factor consistency",
+        "Persisting data-quality findings",
+    ]
 
 
 def test_operation_runs_preserve_started_failed_and_completed_state(tmp_path) -> None:

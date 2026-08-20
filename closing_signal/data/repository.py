@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
+from closing_signal.core.progress import ProgressEvent, ProgressReporter, no_progress
 from closing_signal.domain.models import (
     CorporateAction,
     DailyBar,
@@ -1037,10 +1038,11 @@ class SQLiteRepository:
             result[key] = result.get(key, Decimal(0)) + Decimal(amount)
         return result
 
-    def run_data_audit(self) -> int:
+    def run_data_audit(self, progress: ProgressReporter = no_progress) -> int:
         """Quarantine incomplete adjusted series and inconsistent OHLC factors."""
         findings = 0
         with closing(self._connect()) as connection:
+            progress(ProgressEvent("Scanning for incomplete adjustment series"))
             incomplete = connection.execute("""
                 SELECT instrument_id, session_date, provider, feed, frequency,
                        GROUP_CONCAT(DISTINCT adjustment)
@@ -1048,6 +1050,7 @@ class SQLiteRepository:
                 GROUP BY instrument_id, session_date, provider, feed, frequency
                 HAVING COUNT(DISTINCT adjustment) < 3
                 """).fetchall()
+            progress(ProgressEvent("Checking split-factor consistency"))
             comparisons = connection.execute("""
                 SELECT raw.instrument_id, raw.session_date,
                        raw.open, raw.high, raw.low, raw.close,
@@ -1062,6 +1065,7 @@ class SQLiteRepository:
                  AND adjusted.adjustment = 'split'
                 WHERE raw.adjustment = 'raw'
                 """).fetchall()
+        progress(ProgressEvent("Persisting data-quality findings"))
         for instrument_id, session, provider, feed, frequency, adjustments in incomplete:
             findings += 1
             self.quarantine(
