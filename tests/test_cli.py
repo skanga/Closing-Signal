@@ -1,7 +1,6 @@
 """Operator command surface and exit-status contracts."""
 
 import json
-
 from types import SimpleNamespace
 
 from closing_signal import cli
