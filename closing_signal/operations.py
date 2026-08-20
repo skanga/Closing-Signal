@@ -5,7 +5,7 @@ import hashlib
 import json
 import shutil
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -67,9 +67,7 @@ def validate_operational_files(settings: AppSettings) -> None:
         raise ValueError("subscriber file has no active recipients")
 
 
-def build_alpaca(
-    settings: AppSettings, progress: ProgressReporter = no_progress
-) -> AlpacaClient:
+def build_alpaca(settings: AppSettings, progress: ProgressReporter = no_progress) -> AlpacaClient:
     """Construct the official provider adapter without exposing credentials."""
     return AlpacaClient(
         api_key=settings.alpaca_api_key.get_secret_value(),
@@ -606,8 +604,9 @@ def _backtest_inputs(repository: SQLiteRepository, config: BacktestConfig) -> tu
     )
 
 
-def _backtest_progress(reporter: ProgressReporter):
+def _backtest_progress(reporter: ProgressReporter) -> Callable[[BacktestProgress], None]:
     """Adapt engine session completions to bounded operation progress milestones."""
+
     def report(event: BacktestProgress) -> None:
         if event.completed_sessions % 25 and event.completed_sessions != event.total_sessions:
             return

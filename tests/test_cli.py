@@ -103,9 +103,7 @@ def test_operation_record_failure_releases_global_lock(tmp_path, monkeypatch) ->
     assert second_status == 0
 
 
-def test_run_writes_progress_to_stderr_and_result_to_stdout(
-    tmp_path, monkeypatch, capsys
-) -> None:
+def test_run_writes_progress_to_stderr_and_result_to_stdout(tmp_path, monkeypatch, capsys) -> None:
     database = tmp_path / "market.db"
     monkeypatch.setattr(cli, "load_settings", lambda path: SimpleNamespace(database_path=database))
 

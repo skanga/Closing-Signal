@@ -102,9 +102,7 @@ def test_sync_universe_persists_accepted_and_quarantines_rejected(tmp_path, monk
             (_instrument(),), (RejectedInstrument("OTCM", "venue is not NYSE or Nasdaq"),)
         )
     )
-    monkeypatch.setattr(
-        "closing_signal.operations.build_alpaca", lambda settings, progress: client
-    )
+    monkeypatch.setattr("closing_signal.operations.build_alpaca", lambda settings, progress: client)
 
     status = sync_universe(
         argparse.Namespace(as_of=date(2026, 1, 3)), SimpleNamespace(), repository
@@ -263,12 +261,8 @@ def test_screen_persists_structured_result_and_routes_email(tmp_path, monkeypatc
     assert repository.count("strategy_selections") == 1
     assert repository.count("subscription_events") == 1
     assert delivery.messages == 1
-    assert "Preparing point-in-time screening data" in {
-        event.message for event in screen_events
-    }
-    assert any(
-        event.message.startswith("Evaluating strategy ") for event in screen_events
-    )
+    assert "Preparing point-in-time screening data" in {event.message for event in screen_events}
+    assert any(event.message.startswith("Evaluating strategy ") for event in screen_events)
 
 
 def test_sec_sync_delivers_candidate_and_persists_accession(tmp_path, monkeypatch) -> None:
@@ -354,6 +348,7 @@ def test_retry_notifications_forwards_progress(monkeypatch) -> None:
         return 0
 
     monkeypatch.setattr("closing_signal.operations.screen", fake_screen)
+
     def reporter(event) -> None:
         del event
 
@@ -440,9 +435,7 @@ def test_backtest_operation_writes_report_bundle(tmp_path, monkeypatch) -> None:
     assert "Loading the backtest request and stored inputs" in {
         event.message for event in backtest_events
     }
-    assert any(
-        event.message == "Evaluating backtest sessions" for event in backtest_events
-    )
+    assert any(event.message == "Evaluating backtest sessions" for event in backtest_events)
 
 
 def test_backtest_operation_runs_walk_forward_and_writes_isolated_folds(

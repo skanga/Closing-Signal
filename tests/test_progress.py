@@ -38,7 +38,5 @@ def test_stderr_reporter_does_not_mask_operation_when_stderr_fails(monkeypatch) 
 
 def test_should_report_first_last_and_bounded_intervals() -> None:
     assert [
-        completed
-        for completed in range(1, 26)
-        if should_report(completed, total=25, every=10)
+        completed for completed in range(1, 26) if should_report(completed, total=25, every=10)
     ] == [1, 10, 20, 25]
