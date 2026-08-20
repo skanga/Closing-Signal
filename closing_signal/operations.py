@@ -4,7 +4,8 @@ import argparse
 import hashlib
 import json
 import shutil
-from collections.abc import Mapping
+from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -22,7 +23,7 @@ from closing_signal.backtest.request import (
     parse_backtest_request,
 )
 from closing_signal.core.http import RetryPolicy
-from closing_signal.core.progress import ProgressReporter, no_progress
+from closing_signal.core.progress import ProgressEvent, ProgressReporter, no_progress
 from closing_signal.core.us_config import AppSettings
 from closing_signal.data.ingestion import MarketDataIngestionService
 from closing_signal.data.repository import SQLiteRepository
@@ -30,7 +31,12 @@ from closing_signal.market.calendar import ExchangeCalendar, MarketSession
 from closing_signal.notify.delivery import EmailDeliveryService, SMTPTransport
 from closing_signal.notify.email import EmailRenderer, NotificationContent
 from closing_signal.notify.subscribers import SubscriberRegistry
-from closing_signal.providers.alpaca import AlpacaClient, AssetClassifier, JsonAssetClassifier
+from closing_signal.providers.alpaca import (
+    AlpacaClient,
+    AssetClassifier,
+    JsonAssetClassifier,
+    RejectedInstrument,
+)
 from closing_signal.providers.reference import (
     NasdaqDirectoryClient,
     OpenFigiClient,
@@ -99,6 +105,22 @@ def _asset_classifier(
     )
 
 
+def _rejection_reasons(
+    rejected: Sequence[RejectedInstrument],
+) -> list[dict[str, object]]:
+    counts = Counter(item.reason for item in rejected)
+    examples: defaultdict[str, list[str]] = defaultdict(list)
+    for item in rejected:
+        selected = examples[item.reason]
+        if item.provider_symbol not in selected and len(selected) < 3:
+            selected.append(item.provider_symbol)
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:5]
+    return [
+        {"reason": reason, "count": count, "examples": examples[reason]}
+        for reason, count in ordered
+    ]
+
+
 def sync_universe(
     args: argparse.Namespace,
     settings: AppSettings,
@@ -106,13 +128,11 @@ def sync_universe(
     progress: ProgressReporter = no_progress,
 ) -> int:
     """Synchronize mapped NYSE/Nasdaq securities and snapshot membership."""
-    client = (
-        build_alpaca(settings)
-        if progress is no_progress
-        else build_alpaca(settings, progress)
-    )
+    client = build_alpaca(settings, progress)
     observed_on = args.as_of or _latest_completed_session(client, settings).session_date
+    progress(ProgressEvent("Fetching the Alpaca asset catalog"))
     result = client.fetch_instruments(observed_on=observed_on)
+    progress(ProgressEvent("Persisting instruments and quarantine findings"))
     repository.upsert_instruments(result.accepted)
     repository.replace_universe_snapshot(
         observed_on,
@@ -139,6 +159,11 @@ def sync_universe(
         "rejected": len(result.rejected),
         "warnings": len(result.warnings),
     }
+    if not result.accepted:
+        summary["rejection_reasons"] = _rejection_reasons(result.rejected)
+        summary["next_step"] = (
+            "Review rejection_reasons and provider credentials, then rerun sync-universe."
+        )
     print(json.dumps(summary, sort_keys=True))
     return 0 if result.accepted else 4
 

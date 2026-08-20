@@ -101,7 +101,9 @@ def test_sync_universe_persists_accepted_and_quarantines_rejected(tmp_path, monk
             (_instrument(),), (RejectedInstrument("OTCM", "venue is not NYSE or Nasdaq"),)
         )
     )
-    monkeypatch.setattr("closing_signal.operations.build_alpaca", lambda settings: client)
+    monkeypatch.setattr(
+        "closing_signal.operations.build_alpaca", lambda settings, progress: client
+    )
 
     status = sync_universe(
         argparse.Namespace(as_of=date(2026, 1, 3)), SimpleNamespace(), repository
@@ -110,6 +112,51 @@ def test_sync_universe_persists_accepted_and_quarantines_rejected(tmp_path, monk
     assert status == 0
     assert repository.count("instruments") == 1
     assert repository.count("quarantined_records") == 1
+
+
+def test_sync_universe_failure_reports_bounded_actionable_reasons(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    repository = SQLiteRepository(tmp_path / "market.db")
+    rejected = tuple(
+        [RejectedInstrument(f"OTC{index}", "venue is not NYSE or Nasdaq") for index in range(5)]
+        + [RejectedInstrument("AAPL", "OpenFIGI API error: invalid request")]
+    )
+    client = SimpleNamespace(
+        fetch_instruments=lambda observed_on: InstrumentFetchResult((), rejected)
+    )
+    monkeypatch.setattr(
+        "closing_signal.operations.build_alpaca",
+        lambda settings, progress: client,
+    )
+    events = []
+
+    status = sync_universe(
+        argparse.Namespace(as_of=date(2026, 8, 19)),
+        SimpleNamespace(),
+        repository,
+        events.append,
+    )
+    summary = json.loads(capsys.readouterr().out)
+
+    assert status == 4
+    assert summary["rejection_reasons"] == [
+        {
+            "reason": "venue is not NYSE or Nasdaq",
+            "count": 5,
+            "examples": ["OTC0", "OTC1", "OTC2"],
+        },
+        {
+            "reason": "OpenFIGI API error: invalid request",
+            "count": 1,
+            "examples": ["AAPL"],
+        },
+    ]
+    assert "rerun sync-universe" in summary["next_step"]
+    assert [event.message for event in events] == [
+        "Fetching the Alpaca asset catalog",
+        "Persisting instruments and quarantine findings",
+    ]
 
 
 def test_sync_daily_ingests_all_adjustments_and_actions(tmp_path, monkeypatch) -> None:
