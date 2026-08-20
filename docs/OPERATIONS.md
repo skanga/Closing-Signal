@@ -61,6 +61,12 @@ uv run closing-signal --config config/settings.toml sec-sync
 uv run closing-signal --config config/settings.toml health
 ```
 
+Progress lines are written to stderr and flushed as work advances; final command
+summaries remain on stdout. Capture both streams in scheduled jobs. A lack of
+new progress beyond the normal provider timeout/retry window is actionable, as
+is any nonzero final exit status. Universe-sync failures include bounded current-
+run reason counts and sample symbols; investigate those fields before rerunning.
+
 The application rejects a daily or screening date later than the latest
 completed exchange session. A single database lock prevents overlapping mutating
 commands.

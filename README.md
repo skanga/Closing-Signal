@@ -87,6 +87,19 @@ session. Run the completed-session sequence only after the configured
 post-close finalization delay. Mutating commands acquire a single local lock, so
 run them sequentially rather than from overlapping shells or scheduler jobs.
 
+Long-running commands print flushed, human-readable progress to stderr and one
+final machine-readable summary to stdout. Redirect the streams independently
+when running under a scheduler:
+
+```powershell
+uv run closing-signal --config config/settings.toml sync-universe `
+  1>sync-universe-result.json 2>sync-universe-progress.log
+```
+
+If `sync-universe` accepts no instruments, its final JSON includes the five most
+common rejection reasons, up to three sample symbols per reason, and a suggested
+next step. Provider credentials and raw responses are never printed.
+
 ### First-time data preparation
 
 ```powershell
