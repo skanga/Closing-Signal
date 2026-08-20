@@ -61,19 +61,23 @@ def validate_operational_files(settings: AppSettings) -> None:
         raise ValueError("subscriber file has no active recipients")
 
 
-def build_alpaca(settings: AppSettings) -> AlpacaClient:
+def build_alpaca(
+    settings: AppSettings, progress: ProgressReporter = no_progress
+) -> AlpacaClient:
     """Construct the official provider adapter without exposing credentials."""
     return AlpacaClient(
         api_key=settings.alpaca_api_key.get_secret_value(),
         api_secret=settings.alpaca_api_secret.get_secret_value(),
         feed=settings.alpaca_feed,
-        classifier=_asset_classifier(settings),
+        classifier=_asset_classifier(settings, progress),
         retry_policy=_retry_policy(settings),
         asset_base_url=settings.alpaca_asset_base_url,
     )
 
 
-def _asset_classifier(settings: AppSettings) -> AssetClassifier:
+def _asset_classifier(
+    settings: AppSettings, progress: ProgressReporter = no_progress
+) -> AssetClassifier:
     if settings.asset_classification_source == "json":
         assert settings.asset_classification_file is not None
         return JsonAssetClassifier.load(settings.asset_classification_file)
@@ -83,6 +87,7 @@ def _asset_classifier(settings: AppSettings) -> AssetClassifier:
         OpenFigiClient(
             api_key=settings.openfigi_api_key.get_secret_value(),
             retry_policy=retry_policy,
+            progress=progress,
         ),
         NasdaqDirectoryClient(retry_policy=retry_policy),
         SECCompanyTickerClient(
@@ -90,6 +95,7 @@ def _asset_classifier(settings: AppSettings) -> AssetClassifier:
             contact_email=settings.sec_contact_email,
             retry_policy=retry_policy,
         ),
+        progress=progress,
     )
 
 
@@ -100,7 +106,11 @@ def sync_universe(
     progress: ProgressReporter = no_progress,
 ) -> int:
     """Synchronize mapped NYSE/Nasdaq securities and snapshot membership."""
-    client = build_alpaca(settings)
+    client = (
+        build_alpaca(settings)
+        if progress is no_progress
+        else build_alpaca(settings, progress)
+    )
     observed_on = args.as_of or _latest_completed_session(client, settings).session_date
     result = client.fetch_instruments(observed_on=observed_on)
     repository.upsert_instruments(result.accepted)

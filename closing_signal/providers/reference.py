@@ -8,11 +8,12 @@ import time
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, ClassVar, Protocol, cast
+from typing import Any, Protocol, cast
 
 import requests
 
 from closing_signal.core.http import RetryPolicy, call_with_retry
+from closing_signal.core.progress import ProgressEvent, ProgressReporter, no_progress, should_report
 from closing_signal.domain.models import Exchange, InstrumentType
 
 
@@ -78,10 +79,6 @@ class OpenFigiClient:
     """Batch OpenFIGI mappings without inferring types from names or tickers."""
 
     _URL = "https://api.openfigi.com/v3/mapping"
-    _MIC: ClassVar[dict[Exchange, str]] = {
-        Exchange.NASDAQ: "XNAS",
-        Exchange.NYSE: "XNYS",
-    }
 
     def __init__(
         self,
@@ -92,6 +89,7 @@ class OpenFigiClient:
         retry_policy: RetryPolicy | None = None,
         request_interval: float = 0.25,
         sleep: Callable[[float], None] = time.sleep,
+        progress: ProgressReporter = no_progress,
     ) -> None:
         if not api_key:
             raise ValueError("OpenFIGI API key is required")
@@ -109,6 +107,7 @@ class OpenFigiClient:
         self.retry_policy = retry_policy
         self.request_interval = request_interval
         self.sleep = sleep
+        self.progress = progress
 
     def fetch_classifications(
         self, assets: Sequence[Mapping[str, object]]
@@ -126,16 +125,27 @@ class OpenFigiClient:
             if symbol:
                 valid_assets.append((symbol, exchange))
 
+        total_batches = (len(valid_assets) + 99) // 100
         for batch_index, offset in enumerate(range(0, len(valid_assets), 100)):
             batch = valid_assets[offset : offset + 100]
+            batch_number = batch_index + 1
+            if should_report(batch_number, total=total_batches, every=10):
+                self.progress(
+                    ProgressEvent(
+                        "Classifying assets with OpenFIGI",
+                        completed=batch_number,
+                        total=total_batches,
+                        unit="batches",
+                    )
+                )
             jobs = [
                 {
-                    "idType": "ID_EXCH_SYMBOL",
+                    "idType": "TICKER",
                     "idValue": symbol,
-                    "micCode": self._MIC[exchange],
+                    "exchCode": "US",
                     "marketSecDes": "Equity",
                 }
-                for symbol, exchange in batch
+                for symbol, _exchange in batch
             ]
             if batch_index:
                 self.sleep(self.request_interval)
@@ -225,18 +235,23 @@ class ReconciledAssetClassifier:
         primary: PrimaryClassificationSource,
         nasdaq: NasdaqReferenceSource,
         sec: SECReferenceSource,
+        progress: ProgressReporter = no_progress,
     ) -> None:
         self.primary = primary
         self.nasdaq = nasdaq
         self.sec = sec
+        self.progress = progress
         self._classifications: Mapping[str, InstrumentType] = {}
         self._failures: dict[str, str] = {}
         self._warnings: dict[str, tuple[str, ...]] = {}
 
     def prepare(self, assets: Sequence[Mapping[str, object]]) -> None:
         """Fetch each source once and reconcile the complete Alpaca catalog."""
+        self.progress(ProgressEvent("Classifying the Alpaca catalog with OpenFIGI"))
         primary = self.primary.fetch_classifications(assets)
+        self.progress(ProgressEvent("Reconciling the Nasdaq listing directories"))
         nasdaq = self.nasdaq.fetch_references()
+        self.progress(ProgressEvent("Reconciling SEC company ticker associations"))
         sec = self.sec.fetch_references()
         self._classifications = primary.classifications
         self._failures = dict(primary.issues)
@@ -344,6 +359,11 @@ def _sec_exchange(value: str) -> Exchange | None:
 def _map_openfigi_result(raw_result: object) -> InstrumentType | str:
     if not isinstance(raw_result, dict):
         return "OpenFIGI result is not an object"
+    for key in ("error", "warning"):
+        value = raw_result.get(key)
+        if isinstance(value, str) and value.strip():
+            message = " ".join(value.split())[:500]
+            return f"OpenFIGI API {key}: {message}"
     data = raw_result.get("data")
     if not isinstance(data, list) or not data:
         return "OpenFIGI did not return a mapping"

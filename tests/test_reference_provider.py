@@ -80,11 +80,45 @@ def test_openfigi_maps_explicit_types_and_refuses_ambiguous_results() -> None:
     jobs = session.posts[0][1]
     assert isinstance(jobs, list)
     assert jobs[0] == {
-        "idType": "ID_EXCH_SYMBOL",
+        "idType": "TICKER",
         "idValue": "AAPL",
-        "micCode": "XNAS",
+        "exchCode": "US",
         "marketSecDes": "Equity",
     }
+
+
+def test_openfigi_preserves_actionable_provider_errors_and_warnings() -> None:
+    session = StubSession(
+        [[{"error": "securityType2 required"}, {"warning": "No identifier found."}]]
+    )
+    client = OpenFigiClient(api_key="openfigi-key", session=session, request_interval=0)
+
+    result = client.fetch_classifications([_asset("AAPL"), _asset("MISSING")])
+
+    assert result.issues == {
+        "AAPL": "OpenFIGI API error: securityType2 required",
+        "MISSING": "OpenFIGI API warning: No identifier found.",
+    }
+
+
+def test_openfigi_reports_bounded_batch_progress() -> None:
+    assets = [_asset(f"SYM{index:03}") for index in range(101)]
+    mapped = {"data": [{"securityType": "Common Stock"}]}
+    session = StubSession([[mapped] * 100, [mapped]])
+    events = []
+    client = OpenFigiClient(
+        api_key="openfigi-key",
+        session=session,
+        request_interval=0,
+        progress=events.append,
+    )
+
+    client.fetch_classifications(assets)
+
+    assert [(event.completed, event.total, event.unit) for event in events] == [
+        (1, 2, "batches"),
+        (2, 2, "batches"),
+    ]
 
 
 class PrimarySource:
@@ -120,7 +154,10 @@ class SECSource:
 
 
 def test_reconciler_rejects_primary_type_and_exchange_conflicts() -> None:
-    classifier = ReconciledAssetClassifier(PrimarySource(), NasdaqSource(), SECSource())
+    events = []
+    classifier = ReconciledAssetClassifier(
+        PrimarySource(), NasdaqSource(), SECSource(), progress=events.append
+    )
     assets = [_asset("AAPL"), _asset("QQQ"), _asset("BABA", "NYSE")]
 
     classifier.prepare(assets)
@@ -130,6 +167,11 @@ def test_reconciler_rejects_primary_type_and_exchange_conflicts() -> None:
     assert classifier.failure_reason(assets[1]) == "OpenFIGI type conflicts with Nasdaq ETF flag"
     assert classifier.classify(assets[2]) is None
     assert classifier.failure_reason(assets[2]) == "Alpaca venue conflicts with SEC association"
+    assert [event.message for event in events] == [
+        "Classifying the Alpaca catalog with OpenFIGI",
+        "Reconciling the Nasdaq listing directories",
+        "Reconciling SEC company ticker associations",
+    ]
 
 
 def test_reference_parsers_keep_only_nyse_nasdaq_non_test_symbols() -> None:
