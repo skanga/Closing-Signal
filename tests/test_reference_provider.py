@@ -101,6 +101,25 @@ def test_openfigi_preserves_actionable_provider_errors_and_warnings() -> None:
     }
 
 
+def test_openfigi_accepts_valid_data_returned_with_a_warning() -> None:
+    session = StubSession(
+        [
+            [
+                {
+                    "warning": "Additional provider context.",
+                    "data": [{"securityType": "Common Stock"}],
+                }
+            ]
+        ]
+    )
+    client = OpenFigiClient(api_key="openfigi-key", session=session, request_interval=0)
+
+    result = client.fetch_classifications([_asset("AAPL")])
+
+    assert result.classifications == {"AAPL": InstrumentType.COMMON_STOCK}
+    assert result.issues == {}
+
+
 def test_openfigi_reports_bounded_batch_progress() -> None:
     assets = [_asset(f"SYM{index:03}") for index in range(101)]
     mapped = {"data": [{"securityType": "Common Stock"}]}

@@ -23,8 +23,10 @@ operating system permits it:
   must provide at least two complete parameter sets and an explicit selection
   metric and direction.
 
-Run `validate-config` after every configuration change. It reports validation
-errors without printing secret values.
+Run `validate-config` after every configuration change. Success writes
+`{"message":"configuration valid","status":"complete"}` to stdout. Validation
+failures write one JSON object with `status: "failed"` and an `error` message;
+human-readable detail remains on stderr without printing secret values.
 
 The baseline health thresholds are one market session, 26 hours for required
 operations, and 10 GiB free disk. The required schedule inventory contains
@@ -61,11 +63,13 @@ uv run closing-signal --config config/settings.toml sec-sync
 uv run closing-signal --config config/settings.toml health
 ```
 
-Progress lines are written to stderr and flushed as work advances; final command
-summaries remain on stdout. Capture both streams in scheduled jobs. A lack of
-new progress beyond the normal provider timeout/retry window is actionable, as
-is any nonzero final exit status. Universe-sync failures include bounded current-
-run reason counts and sample symbols; investigate those fields before rerunning.
+Progress lines are written to stderr and flushed as work advances. Every terminal
+path writes exactly one JSON object to stdout only after required bookkeeping
+succeeds; failures use `status: "failed"` and an `error` message. Capture both
+streams in scheduled jobs. A lack of new progress beyond the normal provider
+timeout/retry window is actionable, as is any nonzero final exit status.
+Universe-sync failures include bounded current-run reason counts and sample
+symbols; investigate those fields before rerunning.
 
 The application rejects a daily or screening date later than the latest
 completed exchange session. A single database lock prevents overlapping mutating

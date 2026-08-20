@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 import uuid
 from collections.abc import Callable, Sequence
+from contextlib import redirect_stdout
 from datetime import date
+from io import StringIO
 from pathlib import Path
+from typing import cast
 
 from pydantic import ValidationError
 
@@ -92,33 +97,42 @@ def run(argv: Sequence[str] | None = None) -> int:
     try:
         settings = load_settings(args.config)
     except (ConfigurationFileError, ValidationError) as exc:
-        print(f"configuration invalid: {exc}")
+        _write_failure("configuration invalid", diagnostic=f"configuration invalid: {exc}")
         return 2
 
     if args.command == "validate-config":
         try:
             validate_operational_files(settings)
         except (OSError, ValueError) as exc:
-            print(f"configuration invalid: {exc}")
+            _write_failure("configuration invalid", diagnostic=f"configuration invalid: {exc}")
             return 2
-        print("configuration valid")
+        _write_result({"status": "complete", "message": "configuration valid"})
         return 0
     repository = SQLiteRepository(settings.database_path)
     if args.command == "health":
-        return health_check(args, settings, repository)
+        status, result = _capture_result(lambda: health_check(args, settings, repository))
+        _write_result(result)
+        return status
     handler = _OPERATION_HANDLERS.get(args.command)
     if handler is None:
-        print(f"command not implemented: {args.command}")
+        message = f"command not implemented: {args.command}"
+        _write_failure(message)
         return 3
     owner = str(uuid.uuid4())
     lock_name = "mutating-operation"
     if not repository.acquire_operation_lock(lock_name, owner):
-        print(f"operation already running: {args.command}")
+        message = f"operation already running: {args.command}"
+        _write_failure(message)
         return 5
+    failure: Exception | None = None
+    result: dict[str, object] | None = None
+    status = 4
     try:
         repository.start_operation_run(owner, args.command)
         try:
-            status = handler(args, settings, repository, progress)
+            status, result = _capture_result(
+                lambda: handler(args, settings, repository, progress)
+            )
         except Exception as exc:
             repository.finish_operation_run(
                 owner,
@@ -126,20 +140,24 @@ def run(argv: Sequence[str] | None = None) -> int:
                 exit_code=4,
                 error_type=type(exc).__name__,
             )
-            print(f"{args.command} failed: {type(exc).__name__}")
-            return 4
+            raise
         repository.finish_operation_run(
             owner,
             status="complete" if status == 0 else "failed",
             exit_code=status,
             error_type=None,
         )
-        return status
     except Exception as exc:
-        print(f"{args.command} failed: {type(exc).__name__}")
+        failure = exc
+    repository.release_operation_lock(lock_name, owner)
+    if failure is not None:
+        message = f"{args.command} failed: {type(failure).__name__}"
+        _write_failure(message)
         return 4
-    finally:
-        repository.release_operation_lock(lock_name, owner)
+    if result is None:  # pragma: no cover - guarded by the captured-result contract.
+        raise RuntimeError("command completed without a result")
+    _write_result(result)
+    return status
 
 
 _OPERATION_HANDLERS: dict[
@@ -163,12 +181,50 @@ def _iso_date(value: str) -> date:
         raise argparse.ArgumentTypeError("date must use YYYY-MM-DD") from exc
 
 
+def _capture_result(operation: Callable[[], int]) -> tuple[int, dict[str, object]]:
+    """Buffer and validate one handler result before exposing it to automation."""
+    output = StringIO()
+    with redirect_stdout(output):
+        status = operation()
+    try:
+        result: object = json.loads(output.getvalue())
+    except json.JSONDecodeError as exc:
+        raise ValueError("command result must be one JSON document") from exc
+    if not isinstance(result, dict):
+        raise ValueError("command result must be a JSON object")
+    return status, cast(dict[str, object], result)
+
+
+def _write_result(result: dict[str, object]) -> None:
+    """Emit one canonical machine-readable terminal result."""
+    print(json.dumps(result, sort_keys=True))
+
+
+def _write_failure(error: str, *, diagnostic: str | None = None) -> None:
+    """Keep stable automation output separate from best-effort human diagnostics."""
+    _write_diagnostic(diagnostic or error)
+    _write_result({"status": "failed", "error": error})
+
+
+def _write_diagnostic(message: str) -> None:
+    stream = sys.stderr
+    if stream is None:
+        return
+    try:
+        print(message, file=stream, flush=True)
+    except Exception:
+        return
+
+
 def main() -> None:
     """Installed entry point."""
     try:
         status = run()
-    except Exception:
-        print("operator command failed unexpectedly")
+    except Exception as exc:
+        _write_failure(
+            "operator command failed unexpectedly",
+            diagnostic=f"operator command failed unexpectedly: {type(exc).__name__}",
+        )
         raise SystemExit(1) from None
     if status:
         raise SystemExit(status)

@@ -7,11 +7,13 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import ClassVar
 
+from closing_signal.backtest.engine import BacktestProgress
 from closing_signal.data.repository import SQLiteRepository
 from closing_signal.domain.models import DailyBar, Exchange, Instrument, InstrumentType
 from closing_signal.market.calendar import MarketSession
 from closing_signal.notify.delivery import DeliveryResult
 from closing_signal.operations import (
+    _backtest_progress,
     health_check,
     retry_notifications,
     run_backtest,
@@ -93,6 +95,36 @@ class FakeDelivery:
         if dry_run:
             return DeliveryResult(dry_run=tuple(recipients))
         return DeliveryResult(succeeded=tuple(recipients))
+
+
+def test_single_backtest_progress_renders_segment_and_session_context() -> None:
+    events = []
+
+    _backtest_progress(events.append)(
+        BacktestProgress(
+            session_date=date(2026, 1, 25),
+            completed_sessions=25,
+            total_sessions=50,
+            evaluation_segment="out_of_sample",
+        )
+    )
+
+    assert [event.render() for event in events] == [
+        "Evaluating backtest sessions (out_of_sample, 2026-01-25): 25/50 sessions"
+    ]
+
+
+def test_walk_forward_progress_distinguishes_segments_and_sessions() -> None:
+    events = []
+    report = _backtest_progress(events.append)
+
+    report(BacktestProgress(date(2026, 1, 2), 2, 2, "validation"))
+    report(BacktestProgress(date(2026, 1, 4), 2, 2, "out_of_sample"))
+
+    assert [event.render() for event in events] == [
+        "Evaluating backtest sessions (validation, 2026-01-02): 2/2 sessions",
+        "Evaluating backtest sessions (out_of_sample, 2026-01-04): 2/2 sessions",
+    ]
 
 
 def test_sync_universe_persists_accepted_and_quarantines_rejected(tmp_path, monkeypatch) -> None:
@@ -435,7 +467,10 @@ def test_backtest_operation_writes_report_bundle(tmp_path, monkeypatch) -> None:
     assert "Loading the backtest request and stored inputs" in {
         event.message for event in backtest_events
     }
-    assert any(event.message == "Evaluating backtest sessions" for event in backtest_events)
+    assert any(
+        event.message == "Evaluating backtest sessions (out_of_sample, 2026-01-03)"
+        for event in backtest_events
+    )
 
 
 def test_backtest_operation_runs_walk_forward_and_writes_isolated_folds(

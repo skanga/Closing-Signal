@@ -612,7 +612,8 @@ def _backtest_progress(reporter: ProgressReporter) -> Callable[[BacktestProgress
             return
         reporter(
             ProgressEvent(
-                "Evaluating backtest sessions",
+                "Evaluating backtest sessions "
+                f"({event.evaluation_segment}, {event.session_date.isoformat()})",
                 completed=event.completed_sessions,
                 total=event.total_sessions,
                 unit="sessions",

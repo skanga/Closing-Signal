@@ -359,21 +359,21 @@ def _sec_exchange(value: str) -> Exchange | None:
 def _map_openfigi_result(raw_result: object) -> InstrumentType | str:
     if not isinstance(raw_result, dict):
         return "OpenFIGI result is not an object"
+    data = raw_result.get("data")
+    if isinstance(data, list) and data:
+        types = {_openfigi_type(item) for item in data if isinstance(item, dict)}
+        types.discard(None)
+        if not types:
+            return "OpenFIGI did not return an explicit supported type"
+        if len(types) > 1:
+            return "OpenFIGI returned conflicting security types"
+        return cast(InstrumentType, types.pop())
     for key in ("error", "warning"):
         value = raw_result.get(key)
         if isinstance(value, str) and value.strip():
             message = " ".join(value.split())[:500]
             return f"OpenFIGI API {key}: {message}"
-    data = raw_result.get("data")
-    if not isinstance(data, list) or not data:
-        return "OpenFIGI did not return a mapping"
-    types = {_openfigi_type(item) for item in data if isinstance(item, dict)}
-    types.discard(None)
-    if not types:
-        return "OpenFIGI did not return an explicit supported type"
-    if len(types) > 1:
-        return "OpenFIGI returned conflicting security types"
-    return cast(InstrumentType, types.pop())
+    return "OpenFIGI did not return a mapping"
 
 
 def _openfigi_type(item: Mapping[str, Any]) -> InstrumentType | None:

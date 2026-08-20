@@ -204,7 +204,9 @@ Evidence: uv output, CLI output, gate output, Python/uv versions.
 1. Complete the common setup with valid test credentials and files.
 2. Run `validate-config`.
 
-Expected: exit code 0 and `configuration valid`; no secret value is printed.
+Expected: exit code 0 and exactly one stdout JSON object,
+`{"message":"configuration valid","status":"complete"}`; progress is on stderr
+and no secret value is printed.
 
 #### MT-CFG-003 — Missing and malformed configuration (P0)
 

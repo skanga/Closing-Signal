@@ -45,9 +45,12 @@ class StderrProgressReporter:
         self.operation = operation
 
     def __call__(self, event: ProgressEvent) -> None:
+        stream = sys.stderr
+        if stream is None:
+            return
         try:
-            print(f"[{self.operation}] {event.render()}", file=sys.stderr, flush=True)
-        except OSError:
+            print(f"[{self.operation}] {event.render()}", file=stream, flush=True)
+        except Exception:
             return
 
 

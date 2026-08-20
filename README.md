@@ -80,6 +80,11 @@ authorize a commercial SIP feed or invent your identity. Then validate everythin
 uv run closing-signal --config config/settings.toml validate-config
 ```
 
+Successful validation writes `{"message":"configuration valid","status":"complete"}`
+to stdout. Validation errors use the same terminal-result contract with
+`{"error":"configuration invalid","status":"failed"}` and a nonzero exit code;
+the human-readable detail remains on stderr.
+
 ## Operator workflow
 
 Commands that accept a session date default to the latest completed exchange
@@ -87,9 +92,11 @@ session. Run the completed-session sequence only after the configured
 post-close finalization delay. Mutating commands acquire a single local lock, so
 run them sequentially rather than from overlapping shells or scheduler jobs.
 
-Long-running commands print flushed, human-readable progress to stderr and one
-final machine-readable summary to stdout. Redirect the streams independently
-when running under a scheduler:
+Long-running commands print flushed, human-readable progress to stderr. Every
+terminal path writes exactly one machine-readable JSON object to stdout, after
+operation bookkeeping succeeds. Failures use `status: "failed"` and an `error`
+message; a finalization failure replaces rather than follows a captured success.
+Redirect the streams independently when running under a scheduler:
 
 ```powershell
 uv run closing-signal --config config/settings.toml sync-universe `
