@@ -193,8 +193,11 @@ def test_sync_daily_ingests_all_adjustments_and_actions(tmp_path, monkeypatch) -
         ingestion_chunk_size=100,
         finalization_delay_minutes=1,
     )
+    events = []
 
-    status = sync_daily(argparse.Namespace(session=date(2026, 1, 3)), settings, repository)
+    status = sync_daily(
+        argparse.Namespace(session=date(2026, 1, 3)), settings, repository, events.append
+    )
 
     assert status == 0
     assert repository.count("daily_bars") == 3
@@ -203,6 +206,13 @@ def test_sync_daily_ingests_all_adjustments_and_actions(tmp_path, monkeypatch) -
         (date(2026, 1, 1), date(2026, 1, 3)),
         (date(2026, 1, 1), date(2026, 1, 3)),
     ]
+    assert {
+        "Resolving completed exchange sessions",
+        "Synchronizing raw daily-bar series",
+        "Synchronizing split daily-bar series",
+        "Synchronizing all daily-bar series",
+        "Refreshing corporate actions",
+    }.issubset({event.message for event in events})
 
 
 def test_screen_persists_structured_result_and_routes_email(tmp_path, monkeypatch) -> None:

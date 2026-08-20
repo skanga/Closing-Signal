@@ -76,6 +76,37 @@ def test_partial_run_resumes_only_failed_chunks(tmp_path) -> None:
     assert repository.count("ingestion_pages") == 2
 
 
+def test_sync_reports_each_provider_chunk(tmp_path) -> None:
+    repository = SQLiteRepository(tmp_path / "market.db")
+    provider = FailOnceProvider()
+    provider.failed = True
+    events = []
+    service = MarketDataIngestionService(
+        provider=provider,
+        repository=repository,
+        provider_name="alpaca",
+        feed="sip",
+        chunk_size=2,
+        progress=events.append,
+    )
+
+    service.sync(
+        symbol_identities={
+            "AAPL": "asset-aapl",
+            "GOOG": "asset-goog",
+            "MSFT": "asset-msft",
+        },
+        start=date(2026, 1, 2),
+        end=date(2026, 1, 2),
+        expected_sessions=(date(2026, 1, 2),),
+    )
+
+    assert [(event.message, event.completed, event.total, event.unit) for event in events] == [
+        ("Fetching raw daily bars", 1, 2, "chunks"),
+        ("Fetching raw daily bars", 2, 2, "chunks"),
+    ]
+
+
 def test_missing_expected_session_is_quarantined(tmp_path) -> None:
     repository = SQLiteRepository(tmp_path / "market.db")
     provider = FailOnceProvider()

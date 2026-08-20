@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Protocol
 
+from closing_signal.core.progress import ProgressEvent, ProgressReporter, no_progress
 from closing_signal.domain.models import DailyBar
 
 
@@ -77,6 +78,7 @@ class MarketDataIngestionService:
         feed: str,
         chunk_size: int,
         adjustment: str = "raw",
+        progress: ProgressReporter = no_progress,
     ) -> None:
         if chunk_size < 1:
             raise ValueError("chunk_size must be positive")
@@ -88,6 +90,7 @@ class MarketDataIngestionService:
         if adjustment not in {"raw", "split", "all"}:
             raise ValueError("adjustment must be raw, split, or all")
         self.adjustment = adjustment
+        self.progress = progress
 
     def sync(
         self,
@@ -113,8 +116,17 @@ class MarketDataIngestionService:
         )
         completed = self.repository.completed_ingestion_pages(run_id)
         rows_received = failures = findings = skipped = 0
-        for offset in range(0, len(symbols), self.chunk_size):
+        total_chunks = (len(symbols) + self.chunk_size - 1) // self.chunk_size
+        for chunk_number, offset in enumerate(range(0, len(symbols), self.chunk_size), start=1):
             chunk = symbols[offset : offset + self.chunk_size]
+            self.progress(
+                ProgressEvent(
+                    f"Fetching {self.adjustment} daily bars",
+                    completed=chunk_number,
+                    total=total_chunks,
+                    unit="chunks",
+                )
+            )
             page_key = hashlib.sha256("\0".join(chunk).encode()).hexdigest()
             if page_key in completed:
                 skipped += 1

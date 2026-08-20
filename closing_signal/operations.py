@@ -189,7 +189,15 @@ def sync_daily(
     action_start = _session_lookback_start(
         client, session_date, settings.corporate_action_refetch_sessions
     )
-    return _sync_range(client, settings, repository, start, session_date, action_start=action_start)
+    return _sync_range(
+        client,
+        settings,
+        repository,
+        start,
+        session_date,
+        action_start=action_start,
+        progress=progress,
+    )
 
 
 def backfill(
@@ -205,7 +213,9 @@ def backfill(
     end = args.end or latest
     if end > latest:
         raise ValueError("backfill end is not a completed session")
-    return _sync_range(client, settings, repository, start, end, action_start=start)
+    return _sync_range(
+        client, settings, repository, start, end, action_start=start, progress=progress
+    )
 
 
 def screen(
@@ -729,11 +739,13 @@ def _sync_range(
     end: date,
     *,
     action_start: date,
+    progress: ProgressReporter,
 ) -> int:
     instruments = repository.list_instruments()
     if not instruments:
         print('{"status":"failed","reason":"universe is empty; run sync-universe first"}')
         return 4
+    progress(ProgressEvent("Resolving completed exchange sessions"))
     sessions = tuple(
         session.session_date for session in client.fetch_calendar(start=start, end=end)
     )
@@ -743,6 +755,7 @@ def _sync_range(
     summaries: list[dict[str, object]] = []
     exit_code = 0
     for adjustment in ("raw", "split", "all"):
+        progress(ProgressEvent(f"Synchronizing {adjustment} daily-bar series"))
         service = MarketDataIngestionService(
             provider=client,
             repository=repository,
@@ -750,6 +763,7 @@ def _sync_range(
             feed=settings.alpaca_feed,
             chunk_size=settings.ingestion_chunk_size,
             adjustment=adjustment,
+            progress=progress,
         )
         result = service.sync(
             symbol_identities=identities,
@@ -771,8 +785,22 @@ def _sync_range(
             exit_code = 4
     symbols = sorted(identities)
     action_count = 0
-    for offset in range(0, len(symbols), settings.ingestion_chunk_size):
+    progress(ProgressEvent("Refreshing corporate actions"))
+    total_chunks = (
+        len(symbols) + settings.ingestion_chunk_size - 1
+    ) // settings.ingestion_chunk_size
+    for chunk_number, offset in enumerate(
+        range(0, len(symbols), settings.ingestion_chunk_size), start=1
+    ):
         chunk = symbols[offset : offset + settings.ingestion_chunk_size]
+        progress(
+            ProgressEvent(
+                "Fetching corporate actions",
+                completed=chunk_number,
+                total=total_chunks,
+                unit="chunks",
+            )
+        )
         actions = list(client.fetch_corporate_actions(start=action_start, end=end, symbols=chunk))
         repository.upsert_corporate_actions(actions)
         action_count += len(actions)
